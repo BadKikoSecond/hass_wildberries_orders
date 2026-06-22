@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-API_URL = "https://www.wildberries.ru/webapi/lk/myorders/delivery/active"
+API_URL = "https://www.wildberries.ru/webapi/v2/lk/myorders/delivery/active"
 WARMUP_URL = "https://www.wildberries.ru/lk/myorders/delivery"
 HEADERS = {
     "User-Agent": (

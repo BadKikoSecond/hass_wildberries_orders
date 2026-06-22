@@ -131,7 +131,7 @@ action:
 
 Используется внутренний endpoint покупателя:
 
-`POST https://www.wildberries.ru/webapi/lk/myorders/delivery/active`
+`POST https://www.wildberries.ru/webapi/v2/lk/myorders/delivery/active`
 
 Названия товаров подтягиваются из публичного card API по артикулу (если antibot пропускает).
 

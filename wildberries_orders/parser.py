@@ -20,7 +20,7 @@ _STORAGE_UNTIL_RE = re.compile(r"хранится до\s+(.+)", re.I)
 
 
 def parse_active_deliveries(payload: dict[str, Any]) -> dict[str, Any]:
-    """Parse ``/webapi/lk/myorders/delivery/active`` value object."""
+    """Parse ``/webapi/v2/lk/myorders/delivery/active`` value object."""
     positions = payload.get("positions") or []
     orders = [_parse_position(item, index) for index, item in enumerate(positions)]
     return {

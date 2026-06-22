@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from curl_cffi.requests import AsyncSession
 
-from wildberries_orders.cookies import CookieJar, user_id_from_cookies
+from wildberries_orders.cookies import CookieJar, client_id_from_cookies, user_id_from_cookies
 from wildberries_orders.enrich import enrich_orders
 from wildberries_orders.errors import WildberriesAntibotError, WildberriesAuthError
 from wildberries_orders.parser import parse_active_deliveries
@@ -16,21 +17,22 @@ from wildberries_orders.parser import parse_active_deliveries
 _LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://www.wildberries.ru"
-ACTIVE_DELIVERIES_URL = f"{BASE_URL}/webapi/lk/myorders/delivery/active"
+ACTIVE_DELIVERIES_URL = f"{BASE_URL}/webapi/v2/lk/myorders/delivery/active"
 CARD_API_URL = "https://card.wb.ru/cards/v2/detail"
-BROWSER_IMPERSONATE = "chrome120"
+BROWSER_IMPERSONATE = "chrome131"
+SPA_VERSION = "13.8.0.0"
 
 DEFAULT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     ),
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
     "Referer": "https://www.wildberries.ru/lk/myorders/delivery",
     "Origin": "https://www.wildberries.ru",
     "X-Requested-With": "XMLHttpRequest",
-    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    "Sec-Ch-Ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
     "Sec-Ch-Ua-Mobile": "?0",
     "Sec-Ch-Ua-Platform": '"Linux"',
     "Sec-Fetch-Dest": "empty",
@@ -88,29 +90,41 @@ class WildberriesOrdersClient:
         response = await self._session.post(
             url,
             cookies=self._cookies,
-            headers=DEFAULT_HEADERS,
+            headers=_delivery_headers(self._cookies),
         )
         body = response.text
+        if _looks_like_antibot(response.status_code, body):
+            raise WildberriesAntibotError(
+                "Wildberries antibot. Обновите cookies из браузера, "
+                "где вы уже прошли проверку на wildberries.ru."
+            )
         if response.status_code in (401, 403):
             raise _map_access_error(response.status_code, body)
-        if response.status_code == 498:
-            raise WildberriesAntibotError(
-                "HTTP 498: Wildberries antibot. Обновите cookies из браузера, "
-                "где вы уже прошли проверку."
-            )
-        if response.status_code != 200:
-            raise WildberriesAntibotError(f"HTTP {response.status_code}: {body[:300]}")
 
-        content_type = response.headers.get("Content-Type", "")
-        if "json" not in content_type.lower():
+        data = _parse_json_body(body)
+        if isinstance(data, dict):
+            state = data.get("state", data.get("State"))
+            if state == -1:
+                raise WildberriesAuthError(
+                    f"Wildberries API error: {_extract_error_message(data)}"
+                )
+            if state == 0:
+                value = data.get("value") or data.get("Value")
+                if isinstance(value, dict):
+                    return {"value": value}
+
+        if response.status_code != 200:
+            if isinstance(data, dict):
+                raise WildberriesAuthError(
+                    f"HTTP {response.status_code}: {_extract_error_message(data)}"
+                )
+            raise WildberriesAuthError(f"HTTP {response.status_code}: {body[:200]}")
+
+        if not isinstance(data, dict):
             raise WildberriesAntibotError("Non-JSON response (likely antibot HTML)")
 
-        data = response.json()
-        if not isinstance(data, dict):
-            raise WildberriesAuthError("Unexpected Wildberries response format")
-
         if data.get("error") or data.get("isSuccess") is False:
-            message = data.get("errorText") or data.get("errorMsg") or "session rejected"
+            message = _extract_error_message(data)
             raise WildberriesAuthError(f"Wildberries API error: {message}")
 
         return data
@@ -118,6 +132,8 @@ class WildberriesOrdersClient:
     async def fetch_active_deliveries(self) -> dict[str, Any]:
         data = await self._post_json(ACTIVE_DELIVERIES_URL)
         value = data.get("value")
+        if value is None and "positions" in data:
+            value = data
         if value is None:
             raise WildberriesAuthError(
                 "Wildberries не вернул активные доставки. "
@@ -129,7 +145,9 @@ class WildberriesOrdersClient:
         parsed = parse_active_deliveries(value)
         user = parsed.get("user") or {}
         if not user.get("user_id"):
-            user["user_id"] = user_id_from_cookies(self._cookies)
+            user["user_id"] = client_id_from_cookies(self._cookies) or user_id_from_cookies(
+                self._cookies
+            )
         parsed["user"] = user
 
         orders = parsed.get("orders") or []
@@ -201,14 +219,59 @@ class WildberriesOrdersClient:
         return cards
 
 
+def _delivery_headers(cookies: CookieJar) -> dict[str, str]:
+    return {
+        **DEFAULT_HEADERS,
+        "X-Client-Time": _client_time_header(),
+        "X-Client-Id": client_id_from_cookies(cookies) or "0",
+        "X-Spa-Version": SPA_VERSION,
+    }
+
+
+def _client_time_header() -> str:
+    """Match WB SPA ``getClientDt()`` — local wall clock encoded as UTC ISO."""
+    local = datetime.now().astimezone()
+    wall = local.replace(tzinfo=timezone.utc)
+    return wall.strftime("%Y-%m-%dT%H:%M:%S.") + f"{wall.microsecond // 1000:03d}Z"
+
+
+def _parse_json_body(body: str) -> dict[str, Any] | None:
+    text = body.strip()
+    if not text.startswith("{"):
+        return None
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _extract_error_message(data: dict[str, Any]) -> str:
+    nested = data.get("data")
+    if isinstance(nested, dict):
+        for key in ("errorMsg", "errorText", "message"):
+            if nested.get(key):
+                return str(nested[key])
+    for key in ("errorText", "errorMsg", "message", "error"):
+        if data.get(key):
+            return str(data[key])
+    return "session rejected"
+
+
+def _looks_like_antibot(status: int, body: str) -> bool:
+    if status == 498:
+        return True
+    lowered = body.lower()
+    return status == 403 and any(
+        marker in lowered for marker in ("antibot", "wbaas", "<html", "captcha", "access denied")
+    )
+
+
 def _map_access_error(status: int, body: str) -> WildberriesAntibotError | WildberriesAuthError:
     snippet = body[:500].replace("\n", " ")
     _LOGGER.error("Wildberries HTTP %s body: %s", status, snippet)
 
-    lowered = body.lower()
-    if status == 403 or any(
-        marker in lowered for marker in ("antibot", "wbaas", "<html", "captcha", "access denied")
-    ):
+    if _looks_like_antibot(status, body):
         return WildberriesAntibotError(
             "HTTP 403: Wildberries antibot. Обновите cookies из браузера, "
             "где вы уже прошли проверку."
