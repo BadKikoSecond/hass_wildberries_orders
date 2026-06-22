@@ -1,0 +1,63 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wildberries Orders",
+        "description": "Paste cookies JSON exported from wildberries.ru (Cookie-Editor / EditThisCookie). {hint}",
+        "data": {
+          "cookies": "Cookies (JSON)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to Wildberries",
+      "invalid_auth": "Wildberries rejected the session. Export all wildberries.ru cookies again",
+      "invalid_json": "Invalid JSON — paste the full cookies array",
+      "missing_auth_cookies": "Missing wbx-validation-key / WBToken — export all cookies",
+      "antibot": "Wildberries antibot: refresh cookies from a browser where you are already logged in"
+    },
+    "abort": {
+      "already_configured": "Account already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Wildberries Orders",
+        "data": {
+          "scan_interval": "Polling interval (minutes)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "active_orders": { "name": "Active deliveries" },
+      "at_pickup": { "name": "At pickup point" },
+      "in_transit": { "name": "In transit" },
+      "session_expires": { "name": "Session expires" },
+      "order_status": {
+        "name": "Status",
+        "state_attributes": {
+          "order_number": { "name": "Order number" },
+          "nm_id": { "name": "WB article" },
+          "order_date": { "name": "Order date" },
+          "order_title": { "name": "Order title" },
+          "products": { "name": "Products" },
+          "product_titles": { "name": "Product titles" }
+        }
+      }
+    },
+    "binary_sensor": {
+      "session_valid": { "name": "Session valid" },
+      "order_at_pickup": { "name": "At pickup" },
+      "order_in_transit": { "name": "In transit" }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Refresh orders",
+      "description": "Force refresh Wildberries delivery data"
+    }
+  }
+}
