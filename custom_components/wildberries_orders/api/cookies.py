@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
+from urllib.parse import unquote
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -126,6 +127,28 @@ def session_expiry_info(source: str | Path | Mapping[str, Any] | list[Any]) -> d
 
 def user_id_from_cookies(source: str | Path | Mapping[str, Any] | list[Any]) -> str | None:
     """Best-effort stable account id from exported cookies."""
+    jar = _cookies_jar_from_source(source)
+    return client_id_from_cookies(jar)
+
+
+def client_id_from_cookies(jar: CookieJar) -> str | None:
+    """Wildberries user id for ``X-Client-Id`` (from ``um`` cookie or fallbacks)."""
+    um = jar.get("um")
+    if um:
+        for part in um.split(":"):
+            if "=" not in part:
+                continue
+            key, _, value = part.partition("=")
+            if key == "uid" and value:
+                return unquote(value)
+
+    for name in ("_wbauid", "___wbu", "BasketUID"):
+        if jar.get(name):
+            return jar[name]
+    return None
+
+
+def _cookies_jar_from_source(source: str | Path | Mapping[str, Any] | list[Any]) -> CookieJar:
     if isinstance(source, str) and not Path(source).exists():
         source = parse_cookies_input(source)
     data = _read_source(source)
@@ -138,10 +161,7 @@ def user_id_from_cookies(source: str | Path | Mapping[str, Any] | list[Any]) -> 
         for key, value in data.items():
             if isinstance(value, str) and key not in ("cookies", "origins", "localStorage"):
                 jar[key] = value
-    for name in ("_wbauid", "___wbu", "BasketUID"):
-        if jar.get(name):
-            return jar[name]
-    return None
+    return jar
 
 
 def _cookie_items(data: Any) -> list[dict[str, Any]]:
