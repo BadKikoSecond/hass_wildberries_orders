@@ -1,0 +1,53 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wildberries Orders",
+        "description": "Вставьте JSON cookies с сайта wildberries.ru (экспорт из Cookie-Editor / EditThisCookie). {hint}",
+        "data": {
+          "cookies": "Cookies (JSON)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться к Wildberries",
+      "invalid_auth": "Wildberries не принял сессию. Экспортируйте все cookies с wildberries.ru заново",
+      "invalid_json": "Некорректный JSON — нужен массив cookies целиком",
+      "missing_auth_cookies": "Нет wbx-validation-key / WBToken — экспортируйте все cookies",
+      "antibot": "Wildberries antibot: refresh cookies from a browser where you are already logged in"
+    },
+    "abort": {
+      "already_configured": "Аккаунт уже подключён"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Wildberries Orders",
+        "data": {
+          "scan_interval": "Интервал опроса (минуты)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "active_orders": { "name": "Активные доставки" },
+      "at_pickup": { "name": "В пункте выдачи" },
+      "in_transit": { "name": "В пути" },
+      "session_expires": { "name": "Сессия истекает" },
+      "order_status": { "name": "Статус заказа" }
+    },
+    "binary_sensor": {
+      "session_valid": { "name": "Сессия активна" },
+      "order_at_pickup": { "name": "В ПВЗ" },
+      "order_in_transit": { "name": "В пути" }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Обновить заказы",
+      "description": "Принудительно запросить данные с Wildberries"
+    }
+  }
+}

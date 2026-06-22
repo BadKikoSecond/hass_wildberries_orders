@@ -1,0 +1,85 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wildberries Orders",
+        "description": "Вставьте JSON cookies с сайта wildberries.ru (экспорт из Cookie-Editor / EditThisCookie). {hint}",
+        "data": {
+          "cookies": "Cookies (JSON)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться к Wildberries",
+      "invalid_auth": "Wildberries не принял сессию. Экспортируйте все cookies с wildberries.ru заново",
+      "invalid_json": "Некорректный JSON — нужен массив cookies целиком",
+      "missing_auth_cookies": "Нет wbx-validation-key / WBToken — экспортируйте все cookies, не только пару штук",
+      "antibot": "Wildberries antibot: обновите cookies из браузера, где вы уже залогинены"
+    },
+    "abort": {
+      "already_configured": "Аккаунт уже подключён"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Wildberries Orders",
+        "data": {
+          "scan_interval": "Интервал опроса (минуты)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "active_orders": {
+        "name": "Активные доставки",
+        "state_attributes": {
+          "fetched_at": { "name": "Обновлено" },
+          "last_error": { "name": "Последняя ошибка" }
+        }
+      },
+      "at_pickup": { "name": "В пункте выдачи" },
+      "in_transit": { "name": "В пути" },
+      "session_expires": {
+        "name": "Сессия истекает",
+        "state_attributes": {
+          "days_remaining": { "name": "Дней осталось" },
+          "access_token_expires": { "name": "Validation-key истекает" },
+          "refresh_token_expires": { "name": "WBToken истекает" }
+        }
+      },
+      "order_status": {
+        "name": "Статус",
+        "state_attributes": {
+          "order_number": { "name": "Номер заказа" },
+          "nm_id": { "name": "Артикул WB" },
+          "order_date": { "name": "Дата заказа" },
+          "order_title": { "name": "Заголовок заказа" },
+          "eta": { "name": "Срок доставки" },
+          "delivery_type": { "name": "Способ доставки" },
+          "storage_until": { "name": "Хранится до" },
+          "products_count": { "name": "Количество товаров" },
+          "product_titles": { "name": "Названия товаров" },
+          "products": { "name": "Товары" },
+          "payment_status": { "name": "Оплата" },
+          "detail_url": { "name": "Ссылка на Wildberries" },
+          "is_at_pickup_point": { "name": "В пункте выдачи" },
+          "is_in_transit": { "name": "В пути" },
+          "timeline_steps": { "name": "Этапы доставки" }
+        }
+      }
+    },
+    "binary_sensor": {
+      "session_valid": { "name": "Сессия активна" },
+      "order_at_pickup": { "name": "В ПВЗ" },
+      "order_in_transit": { "name": "В пути" }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Обновить заказы",
+      "description": "Принудительно запросить данные с Wildberries"
+    }
+  }
+}

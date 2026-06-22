@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+cookies.json
+wb_cookies.json
+pc-cookie.json
+*.log
