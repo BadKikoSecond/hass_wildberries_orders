@@ -20,7 +20,7 @@ _STORAGE_UNTIL_RE = re.compile(r"хранится до\s+(.+)", re.I)
 
 
 def parse_active_deliveries(payload: dict[str, Any]) -> dict[str, Any]:
-    """Parse ``/webapi/lk/myorders/delivery/active`` value object."""
+    """Parse ``/webapi/v2/lk/myorders/delivery/active`` value object."""
     positions = payload.get("positions") or []
     orders = [_parse_position(item, index) for index, item in enumerate(positions)]
     return {
@@ -97,6 +97,18 @@ def _build_summary(orders: list[dict[str, Any]]) -> dict[str, int]:
         "in_transit": in_transit,
         "tracking_items": len(orders),
     }
+
+
+def parse_user_grade(payload: dict[str, Any]) -> dict[str, int]:
+    """Parse user-grade payload (completed purchase counters)."""
+    result: dict[str, int] = {}
+    order_count = payload.get("order_count")
+    period_count = payload.get("period_order_count")
+    if isinstance(order_count, int):
+        result["past_purchases_count"] = order_count
+    if isinstance(period_count, int):
+        result["period_purchases_count"] = period_count
+    return result
 
 
 def _normalize_text(text: str | None) -> str:

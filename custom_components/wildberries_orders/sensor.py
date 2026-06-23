@@ -28,6 +28,7 @@ from .const import (
     ATTR_PRODUCTS,
     ATTR_PRODUCTS_COUNT,
     ATTR_PRODUCT_TITLES,
+    ATTR_PERIOD_PURCHASES_COUNT,
     ATTR_REFRESH_TOKEN_EXPIRES,
     ATTR_STORAGE_UNTIL,
     DOMAIN,
@@ -51,6 +52,11 @@ HUB_SENSORS: tuple[SensorEntityDescription, ...] = (
         key="in_transit",
         translation_key="in_transit",
         icon="mdi:truck-delivery",
+    ),
+    SensorEntityDescription(
+        key="past_purchases",
+        translation_key="past_purchases",
+        icon="mdi:shopping",
     ),
     SensorEntityDescription(
         key="session_expires",
@@ -103,14 +109,23 @@ class WildberriesHubSensor(CoordinatorEntity[WildberriesOrdersCoordinator], Sens
             return summary.get("at_pickup_point", 0)
         if key == "in_transit":
             return summary.get("in_transit", 0)
+        if key == "past_purchases":
+            return summary.get("past_purchases_count")
         if key == "session_expires":
             return session.get("session_expires")
         return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        if self.entity_description.key != "session_expires":
-            if self.entity_description.key == "active_orders":
+        key = self.entity_description.key
+        if key == "past_purchases":
+            summary = (self.coordinator.data or {}).get("summary") or {}
+            period = summary.get("period_purchases_count")
+            if period is None:
+                return None
+            return {ATTR_PERIOD_PURCHASES_COUNT: period}
+        if key != "session_expires":
+            if key == "active_orders":
                 return {
                     ATTR_FETCHED_AT: (self.coordinator.data or {}).get("fetched_at"),
                     ATTR_LAST_ERROR: self.coordinator.last_error,

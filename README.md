@@ -21,7 +21,8 @@
 | `sensor.*_active_orders` | Сколько активных доставок |
 | `sensor.*_at_pickup` | Сколько в ПВЗ |
 | `sensor.*_in_transit` | Сколько в пути / в доставке |
-| `sensor.*_session_expires` | Когда истекает сессия (по cookies) |
+| `sensor.*_past_purchases` | Сколько завершённых покупок (user-grade API) |
+| `sensor.*_session_expires` | Когда истекает OAuth-токен / cookies |
 | `binary_sensor.*_session_valid` | Сессия жива / ошибка опроса |
 | `sensor.*_order_*_status` | Статус конкретной позиции + атрибуты |
 | `binary_sensor.*_order_*_at_pickup` | Удобно для автоматизаций «забери посылку» |
@@ -56,15 +57,40 @@
 
 ---
 
-## Настройка cookies
+## Настройка
+
+### Способ A — телефон + код (рекомендуется)
+
+В мастере настройки: **Телефон + код PUSH/SMS** → номер → код из приложения WB.
+
+На хосте HA при первом входе один раз скачается Chromium (~300 МБ). Playwright указан в `manifest.json` и ставится вместе с интеграцией. Если Chromium ещё не скачан:
+
+```bash
+# внутри окружения HA / SSH add-on
+python -m playwright install chromium
+```
+
+После настройки опрос заказов идёт через **curl_cffi**, браузер больше не нужен.
+
+С ПК (экспорт сессии для ручной вставки cookies):
+
+```bash
+cd hass_wildberries_orders
+.venv/bin/python scripts/wb_phone_login.py 79117108265 -i -o cookie.json
+.venv/bin/python cli.py --cookies cookie.json   # проверка
+```
+
+### Способ B — вставить cookies JSON
 
 1. Залогиньтесь на [wildberries.ru](https://www.wildberries.ru) в браузере на ПК
-2. Установите расширение **Cookie-Editor** или **EditThisCookie**
-3. На странице wildberries.ru → Export → **JSON** (весь массив целиком)
-4. **Настройки → Устройства и службы → Добавить → Wildberries Orders**
-5. Вставьте JSON в поле **Cookies (JSON)** и подтвердите
+2. Экспортируйте cookies (Cookie-Editor) **или** `cookie.json` из `wb_phone_login.py`
+3. В мастере: **Вставить cookies JSON**
 
-Нужны все cookies домена `.wildberries.ru`, включая `wbx-validation-key` и/или `WBToken`.
+Обязательны **`x_wbaas_token`** (antibot) и marketplace-токен (`WBTokenV3` / `wbx__tokenData` в storage_state).
+
+### Повторный вход
+
+Если сессия истекла, HA предложит **Reconfigure** / reauth — снова телефон или новый JSON cookies.
 
 ---
 
@@ -129,9 +155,9 @@ action:
 
 ### API
 
-Используется внутренний endpoint покупателя:
-
-`POST https://www.wildberries.ru/webapi/lk/myorders/delivery/active`
+- Активные доставки: `POST /webapi/v2/lk/myorders/delivery/active` + `Authorization: Bearer`
+- Счётчик покупок: `GET user-grade.wildberries.ru/api/v6/grade?curr=rub`
+- Карточки товаров: `card.wb.ru/cards/v2/detail`
 
 Названия товаров подтягиваются из публичного card API по артикулу (если antibot пропускает).
 

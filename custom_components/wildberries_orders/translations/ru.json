@@ -3,21 +3,44 @@
     "step": {
       "user": {
         "title": "Wildberries Orders",
-        "description": "Вставьте JSON cookies с сайта wildberries.ru (экспорт из Cookie-Editor / EditThisCookie). {hint}",
+        "description": "Выберите способ входа.",
+        "menu_options": {
+          "phone": "Телефон + код PUSH/SMS",
+          "cookies": "Вставить cookies JSON"
+        }
+      },
+      "phone": {
+        "title": "Вход по телефону",
+        "description": "На шаге настройки один раз запускается headless Chromium (~15 с). Дальше опрос заказов идёт без браузера.",
         "data": {
-          "cookies": "Cookies (JSON)"
+          "phone": "Номер телефона"
+        }
+      },
+      "phone_code": {
+        "title": "Код подтверждения",
+        "description": "Введите код из PUSH/SMS ({confirmation}).",
+        "data": {
+          "phone_code": "Код (6 цифр)"
+        }
+      },
+      "cookies": {
+        "title": "Вставить cookies",
+        "description": "Экспорт с wildberries.ru (Cookie-Editor JSON или storage_state из wb_phone_login.py). Нужны x_wbaas_token и marketplace-токен (WBTokenV3 или wbx__tokenData).",
+        "data": {
+          "cookies": "Cookies JSON"
         }
       }
     },
     "error": {
-      "cannot_connect": "Не удалось подключиться к Wildberries",
-      "invalid_auth": "Wildberries не принял сессию. Экспортируйте все cookies с wildberries.ru заново",
-      "invalid_json": "Некорректный JSON — нужен массив cookies целиком",
-      "missing_auth_cookies": "Нет wbx-validation-key / WBToken — экспортируйте все cookies, не только пару штук",
-      "antibot": "Wildberries antibot: обновите cookies из браузера, где вы уже залогинены"
+      "cannot_connect": "Не удалось подключиться к Wildberries (antibot или сеть)",
+      "invalid_auth": "Wildberries не принял сессию — проверьте cookies или войдите снова",
+      "playwright_missing": "Не удалось загрузить Playwright — перезапустите Home Assistant",
+      "chromium_install_failed": "Не удалось скачать Chromium. Нужен интернет на хосте HA и ~300 МБ свободного места",
+      "phone_login_failed": "Не удалось войти (antibot, неверный код или лимит — подождите и повторите)"
     },
     "abort": {
-      "already_configured": "Аккаунт уже подключён"
+      "already_configured": "Аккаунт уже подключён",
+      "phone_session_expired": "Сессия входа истекла — начните снова"
     }
   },
   "options": {
@@ -32,54 +55,38 @@
   },
   "entity": {
     "sensor": {
-      "active_orders": {
-        "name": "Активные доставки",
-        "state_attributes": {
-          "fetched_at": { "name": "Обновлено" },
-          "last_error": { "name": "Последняя ошибка" }
-        }
-      },
-      "at_pickup": { "name": "В пункте выдачи" },
+      "active_orders": { "name": "Активные доставки" },
+      "at_pickup": { "name": "На ПВЗ" },
       "in_transit": { "name": "В пути" },
-      "session_expires": {
-        "name": "Сессия истекает",
+      "past_purchases": {
+        "name": "Прошлые покупки",
         "state_attributes": {
-          "days_remaining": { "name": "Дней осталось" },
-          "access_token_expires": { "name": "Validation-key истекает" },
-          "refresh_token_expires": { "name": "WBToken истекает" }
+          "period_purchases_count": { "name": "Покупок за период" }
         }
       },
+      "session_expires": { "name": "Сессия истекает" },
       "order_status": {
         "name": "Статус",
         "state_attributes": {
           "order_number": { "name": "Номер заказа" },
           "nm_id": { "name": "Артикул WB" },
           "order_date": { "name": "Дата заказа" },
-          "order_title": { "name": "Заголовок заказа" },
-          "eta": { "name": "Срок доставки" },
-          "delivery_type": { "name": "Способ доставки" },
-          "storage_until": { "name": "Хранится до" },
-          "products_count": { "name": "Количество товаров" },
-          "product_titles": { "name": "Названия товаров" },
+          "order_title": { "name": "Название заказа" },
           "products": { "name": "Товары" },
-          "payment_status": { "name": "Оплата" },
-          "detail_url": { "name": "Ссылка на Wildberries" },
-          "is_at_pickup_point": { "name": "В пункте выдачи" },
-          "is_in_transit": { "name": "В пути" },
-          "timeline_steps": { "name": "Этапы доставки" }
+          "product_titles": { "name": "Названия товаров" }
         }
       }
     },
     "binary_sensor": {
-      "session_valid": { "name": "Сессия активна" },
-      "order_at_pickup": { "name": "В ПВЗ" },
+      "session_valid": { "name": "Сессия валидна" },
+      "order_at_pickup": { "name": "На ПВЗ" },
       "order_in_transit": { "name": "В пути" }
     }
   },
   "services": {
     "refresh": {
       "name": "Обновить заказы",
-      "description": "Принудительно запросить данные с Wildberries"
+      "description": "Принудительно обновить данные доставок Wildberries"
     }
   }
 }

@@ -3,21 +3,44 @@
     "step": {
       "user": {
         "title": "Wildberries Orders",
-        "description": "Paste cookies JSON exported from wildberries.ru (Cookie-Editor / EditThisCookie). {hint}",
+        "description": "Choose how to sign in.",
+        "menu_options": {
+          "phone": "Phone + PUSH/SMS code",
+          "cookies": "Paste cookies JSON"
+        }
+      },
+      "phone": {
+        "title": "Phone sign-in",
+        "description": "Headless Chromium runs once during setup (~15 s). Order polling uses no browser afterward.",
         "data": {
-          "cookies": "Cookies (JSON)"
+          "phone": "Phone number"
+        }
+      },
+      "phone_code": {
+        "title": "Confirmation code",
+        "description": "Enter the PUSH/SMS code ({confirmation}).",
+        "data": {
+          "phone_code": "Code (6 digits)"
+        }
+      },
+      "cookies": {
+        "title": "Paste cookies",
+        "description": "Export cookies from wildberries.ru (Cookie-Editor JSON or Playwright storage_state from wb_phone_login.py). Must include x_wbaas_token and marketplace token (WBTokenV3 or wbx__tokenData).",
+        "data": {
+          "cookies": "Cookies JSON"
         }
       }
     },
     "error": {
-      "cannot_connect": "Could not connect to Wildberries",
-      "invalid_auth": "Wildberries rejected the session. Export all wildberries.ru cookies again",
-      "invalid_json": "Invalid JSON — paste the full cookies array",
-      "missing_auth_cookies": "Missing wbx-validation-key / WBToken — export all cookies",
-      "antibot": "Wildberries antibot: refresh cookies from a browser where you are already logged in"
+      "cannot_connect": "Could not connect to Wildberries (antibot or network)",
+      "invalid_auth": "Wildberries rejected the session — check cookies or sign in again",
+      "playwright_missing": "Playwright failed to load — restart Home Assistant",
+      "chromium_install_failed": "Could not download Chromium. HA host needs internet and ~300 MB free space",
+      "phone_login_failed": "Login failed (antibot, wrong code, or rate limit — wait and retry)"
     },
     "abort": {
-      "already_configured": "Account already configured"
+      "already_configured": "Account already configured",
+      "phone_session_expired": "Login session expired — start again"
     }
   },
   "options": {
@@ -35,6 +58,12 @@
       "active_orders": { "name": "Active deliveries" },
       "at_pickup": { "name": "At pickup point" },
       "in_transit": { "name": "In transit" },
+      "past_purchases": {
+        "name": "Past purchases",
+        "state_attributes": {
+          "period_purchases_count": { "name": "Purchases in period" }
+        }
+      },
       "session_expires": { "name": "Session expires" },
       "order_status": {
         "name": "Status",

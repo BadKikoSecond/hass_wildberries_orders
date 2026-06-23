@@ -8,15 +8,16 @@ from typing import Any
 
 from curl_cffi.requests import AsyncSession
 
-from .cookies import CookieJar, user_id_from_cookies
+from .cookies import CookieJar, auth_headers, jwt_subject, request_cookies, user_id_from_cookies
 from .enrich import enrich_orders
 from .errors import WildberriesAntibotError, WildberriesAuthError
-from .parser import parse_active_deliveries
+from .parser import parse_active_deliveries, parse_user_grade
 
 _LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://www.wildberries.ru"
-ACTIVE_DELIVERIES_URL = f"{BASE_URL}/webapi/lk/myorders/delivery/active"
+ACTIVE_DELIVERIES_URL = f"{BASE_URL}/webapi/v2/lk/myorders/delivery/active"
+USER_GRADE_URL = "https://user-grade.wildberries.ru/api/v6/grade?curr=rub"
 CARD_API_URL = "https://card.wb.ru/cards/v2/detail"
 BROWSER_IMPERSONATE = "chrome120"
 
@@ -67,29 +68,53 @@ class WildberriesOrdersClient:
         if self._owns_session and self._session is not None:
             await self._session.close()
 
+    def _request_headers(self) -> dict[str, str]:
+        return {**DEFAULT_HEADERS, **auth_headers(self._cookies)}
+
+    def _request_cookies(self) -> CookieJar:
+        return request_cookies(self._cookies)
+
     async def _warmup(self) -> None:
         if self._warmed_up or self._session is None:
             return
         try:
             await self._session.get(
                 f"{BASE_URL}/lk/myorders/delivery",
-                cookies=self._cookies,
-                headers=DEFAULT_HEADERS,
+                cookies=self._request_cookies(),
+                headers=self._request_headers(),
             )
         except Exception as err:
             _LOGGER.debug("Wildberries warmup request failed: %s", err)
         self._warmed_up = True
 
-    async def _post_json(self, url: str) -> dict[str, Any]:
+    async def _post_json(self, url: str, *, json_body: Any | None = None) -> dict[str, Any]:
         if self._session is None:
             raise RuntimeError("Use async with WildberriesOrdersClient(...)")
 
         await self._warmup()
+        headers = self._request_headers()
+        if json_body is not None:
+            headers = {**headers, "Content-Type": "application/json"}
         response = await self._session.post(
             url,
-            cookies=self._cookies,
-            headers=DEFAULT_HEADERS,
+            cookies=self._request_cookies(),
+            headers=headers,
+            json=json_body,
         )
+        return self._parse_json_response(response)
+
+    async def _get_json(self, url: str) -> dict[str, Any]:
+        if self._session is None:
+            raise RuntimeError("Use async with WildberriesOrdersClient(...)")
+
+        response = await self._session.get(
+            url,
+            cookies=self._request_cookies(),
+            headers={**self._request_headers(), "Accept": "*/*"},
+        )
+        return self._parse_json_response(response)
+
+    def _parse_json_response(self, response: Any) -> dict[str, Any]:
         body = response.text
         if response.status_code in (401, 403):
             raise _map_access_error(response.status_code, body)
@@ -113,6 +138,16 @@ class WildberriesOrdersClient:
             message = data.get("errorText") or data.get("errorMsg") or "session rejected"
             raise WildberriesAuthError(f"Wildberries API error: {message}")
 
+        result_state = data.get("resultState")
+        if result_state not in (None, 0):
+            message = data.get("errorText") or data.get("errorMsg") or f"resultState={result_state}"
+            raise WildberriesAuthError(f"Wildberries API error: {message}")
+
+        state = data.get("state")
+        if state not in (None, 0):
+            message = data.get("errorMsg") or data.get("errorText") or f"state={state}"
+            raise WildberriesAuthError(f"Wildberries API error: {message}")
+
         return data
 
     async def fetch_active_deliveries(self) -> dict[str, Any]:
@@ -129,8 +164,15 @@ class WildberriesOrdersClient:
         parsed = parse_active_deliveries(value)
         user = parsed.get("user") or {}
         if not user.get("user_id"):
-            user["user_id"] = user_id_from_cookies(self._cookies)
+            token = auth_headers(self._cookies).get("Authorization", "").removeprefix("Bearer ")
+            user["user_id"] = jwt_subject(token) or user_id_from_cookies(self._cookies)
         parsed["user"] = user
+
+        summary = parsed.get("summary") or {}
+        grade = await self._fetch_user_grade()
+        if grade:
+            summary.update(grade)
+            parsed["summary"] = summary
 
         orders = parsed.get("orders") or []
         cards = await self._fetch_cards([order.get("nm_id") for order in orders])
@@ -146,6 +188,21 @@ class WildberriesOrdersClient:
             "source": ACTIVE_DELIVERIES_URL,
             **parsed,
         }
+
+    async def _fetch_user_grade(self) -> dict[str, Any] | None:
+        try:
+            data = await self._get_json(USER_GRADE_URL)
+        except (WildberriesAuthError, WildberriesAntibotError) as err:
+            _LOGGER.debug("Wildberries user grade request failed: %s", err)
+            return None
+        except Exception as err:
+            _LOGGER.debug("Wildberries user grade request failed: %s", err)
+            return None
+
+        payload = data.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        return parse_user_grade(payload)
 
     async def fetch_order_list(self, *, active_only: bool = True) -> dict[str, Any]:
         if not active_only:
@@ -179,9 +236,9 @@ class WildberriesOrdersClient:
                         "spp": 30,
                         "nm": article,
                     },
-                    cookies=self._cookies,
+                    cookies=self._request_cookies(),
                     headers={
-                        **DEFAULT_HEADERS,
+                        **self._request_headers(),
                         "Referer": f"https://www.wildberries.ru/catalog/{article}/detail.aspx",
                         "Origin": "https://www.wildberries.ru",
                     },

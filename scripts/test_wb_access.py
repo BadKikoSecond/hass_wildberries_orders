@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-API_URL = "https://www.wildberries.ru/webapi/lk/myorders/delivery/active"
+API_URL = "https://www.wildberries.ru/webapi/v2/lk/myorders/delivery/active"
 WARMUP_URL = "https://www.wildberries.ru/lk/myorders/delivery"
 HEADERS = {
     "User-Agent": (
@@ -29,6 +29,17 @@ HEADERS = {
 }
 
 
+def auth_headers(cookies: dict[str, str]) -> dict[str, str]:
+    for name in ("WBTokenV3", "WBToken"):
+        if cookies.get(name):
+            return {"Authorization": f"Bearer {cookies[name]}"}
+    return {}
+
+
+def request_cookies(cookies: dict[str, str]) -> dict[str, str]:
+    return {k: v for k, v in cookies.items() if k not in ("WBTokenV3", "WBToken")}
+
+
 def load_cookies(path: Path) -> dict[str, str]:
     data = json.loads(path.read_text(encoding="utf-8"))
     jar: dict[str, str] = {}
@@ -45,8 +56,9 @@ async def test_aiohttp(cookies: dict[str, str]) -> None:
 
     print("=== aiohttp ===")
     jar = aiohttp.CookieJar(unsafe=True)
-    jar.update_cookies(cookies, response_url=URL("https://www.wildberries.ru"))
-    async with aiohttp.ClientSession(headers=HEADERS, cookie_jar=jar) as session:
+    jar.update_cookies(request_cookies(cookies), response_url=URL("https://www.wildberries.ru"))
+    headers = {**HEADERS, **auth_headers(cookies)}
+    async with aiohttp.ClientSession(headers=headers, cookie_jar=jar) as session:
         try:
             async with session.get(WARMUP_URL, allow_redirects=True, max_redirects=5) as resp:
                 print("warmup", resp.status, (resp.headers.get("content-type") or "")[:40])
@@ -65,11 +77,13 @@ async def test_curl_cffi(cookies: dict[str, str], impersonate: str) -> None:
     from curl_cffi.requests import AsyncSession
 
     print(f"=== curl_cffi {impersonate} ===")
+    headers = {**HEADERS, **auth_headers(cookies)}
+    req_cookies = request_cookies(cookies)
     try:
         async with AsyncSession(impersonate=impersonate) as session:
-            r = await session.get(WARMUP_URL, cookies=cookies, headers=HEADERS)
+            r = await session.get(WARMUP_URL, cookies=req_cookies, headers=headers)
             print("warmup", r.status_code, (r.headers.get("content-type") or "")[:40])
-            r2 = await session.post(API_URL, cookies=cookies, headers=HEADERS)
+            r2 = await session.post(API_URL, cookies=req_cookies, headers=headers)
             print("api", r2.status_code, (r2.headers.get("content-type") or "")[:40])
             if r2.status_code == 200 and "json" in (r2.headers.get("content-type") or ""):
                 value = (r2.json().get("value") or {})
@@ -94,7 +108,7 @@ async def main() -> None:
         await test_curl_cffi(cookies, profile)
 
 
-COOKIES_PATH = Path(sys.argv[1] if len(sys.argv) > 1 else "cookies.json")
+COOKIES_PATH = Path(sys.argv[1] if len(sys.argv) > 1 else "cookie.json")
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -4,6 +4,8 @@ DOMAIN = "wildberries_orders"
 MANUFACTURER = "Wildberries"
 
 CONF_COOKIES = "cookies"
+CONF_PHONE = "phone"
+CONF_PHONE_CODE = "phone_code"
 
 DEFAULT_SCAN_INTERVAL = 15
 
@@ -27,5 +29,6 @@ ATTR_ORDER_TITLE = "order_title"
 ATTR_PRODUCTS = "products"
 ATTR_PRODUCT_TITLES = "product_titles"
 ATTR_NM_ID = "nm_id"
+ATTR_PERIOD_PURCHASES_COUNT = "period_purchases_count"
 
 SERVICE_REFRESH = "refresh"

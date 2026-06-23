@@ -44,7 +44,13 @@ class WildberriesOrdersCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             session = await self.hass.async_add_executor_job(session_expiry_info, cookies_raw)
             async with WildberriesOrdersClient(cookies) as client:
                 payload = await client.fetch_active_deliveries()
-        except (WildberriesAuthError, WildberriesAntibotError, WildberriesOrdersError, OSError, ValueError) as err:
+        except WildberriesAuthError as err:
+            self.connection_ok = False
+            self.last_error = str(err)
+            _LOGGER.error("Wildberries update failed: %s", err)
+            self.hass.async_create_task(self.entry.async_start_reauth_flow())
+            raise UpdateFailed(str(err)) from err
+        except (WildberriesAntibotError, WildberriesOrdersError, OSError, ValueError) as err:
             self.connection_ok = False
             self.last_error = str(err)
             _LOGGER.error("Wildberries update failed: %s", err)

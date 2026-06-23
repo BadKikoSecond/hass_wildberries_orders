@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from datetime import datetime, timezone
@@ -16,6 +17,8 @@ _AUTH_COOKIE_NAMES = (
     "WBTokenV3",
     "_wbSes",
 )
+
+_BEARER_COOKIE_NAMES = ("WBTokenV3", "WBToken")
 
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
 
@@ -58,6 +61,7 @@ def load_cookies(source: str | Path | Mapping[str, Any] | list[Any]) -> CookieJa
 
     if isinstance(data, dict) and "cookies" in data and isinstance(data["cookies"], list):
         _merge_cookie_list(jar, data["cookies"])
+        _merge_local_storage(jar, data)
     elif isinstance(data, list):
         _merge_cookie_list(jar, data)
     elif isinstance(data, dict):
@@ -66,19 +70,65 @@ def load_cookies(source: str | Path | Mapping[str, Any] | list[Any]) -> CookieJa
                 continue
             if isinstance(value, str):
                 jar[key] = value
+        _merge_local_storage(jar, data)
     else:
         raise ValueError("Unsupported cookies JSON format")
 
     if not jar:
         raise ValueError("No cookies found in JSON")
 
-    if not any(name in jar for name in _AUTH_COOKIE_NAMES):
+    if not bearer_token_from_jar(jar):
         raise ValueError(
-            "Missing Wildberries auth cookies (wbx-validation-key / WBToken). "
-            "Export all cookies for .wildberries.ru from a logged-in browser."
+            "Missing WBTokenV3 (OAuth access token). "
+            "Добавьте в JSON cookie с именем WBTokenV3 — значение из "
+            "DevTools → Application → localStorage → wbx__tokenData → token. "
+            "Либо экспортируйте Playwright storage_state с origins/localStorage."
+        )
+
+    token = bearer_token_from_jar(jar)
+    if token and not is_buyer_api_token(token):
+        raise ValueError(
+            "WBTokenV3 is wb-id login token, not buyer API token. "
+            "Повторите вход по телефону в интеграции."
+        )
+
+    if not jar.get("x_wbaas_token"):
+        raise ValueError(
+            "Missing x_wbaas_token (antibot cookie). "
+            "Экспортируйте все cookies домена .wildberries.ru из Firefox."
         )
 
     return jar
+
+
+def bearer_token_from_jar(jar: CookieJar) -> str | None:
+    """OAuth access token stored as WBTokenV3/WBToken in the export."""
+    for name in _BEARER_COOKIE_NAMES:
+        token = jar.get(name)
+        if token:
+            return token
+    return None
+
+
+def is_buyer_api_token(token: str) -> bool:
+    """True when JWT is for wildberries.ru buyer API (not wb-id login token)."""
+    payload = _decode_jwt_payload(token)
+    if not payload:
+        return False
+    client_id = payload.get("client_id")
+    return client_id not in (None, "wb-id")
+
+
+def request_cookies(jar: CookieJar) -> CookieJar:
+    """Cookies for HTTP requests (JWT is sent via Authorization, not Cookie)."""
+    return {name: value for name, value in jar.items() if name not in _BEARER_COOKIE_NAMES}
+
+
+def auth_headers(jar: CookieJar) -> dict[str, str]:
+    token = bearer_token_from_jar(jar)
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
 
 
 def cookies_header(jar: CookieJar) -> str:
@@ -100,6 +150,21 @@ def session_expiry_info(source: str | Path | Mapping[str, Any] | list[Any]) -> d
         exp = _cookie_expiry_datetime(item)
         if exp is not None:
             expiries[str(name)] = exp
+
+    jar: CookieJar = {}
+    if isinstance(data, dict) and isinstance(data.get("cookies"), list):
+        _merge_cookie_list(jar, data["cookies"])
+    elif isinstance(data, list):
+        _merge_cookie_list(jar, data)
+    elif isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, str) and key not in ("cookies", "origins", "localStorage"):
+                jar[key] = value
+    _merge_local_storage(jar, data if isinstance(data, dict) else {})
+
+    token_exp = jwt_expiry_from_jar(jar)
+    if token_exp is not None:
+        expiries["WBTokenV3"] = token_exp
 
     if not expiries:
         return {
@@ -141,6 +206,96 @@ def user_id_from_cookies(source: str | Path | Mapping[str, Any] | list[Any]) -> 
     for name in ("_wbauid", "___wbu", "BasketUID"):
         if jar.get(name):
             return jar[name]
+    token = bearer_token_from_jar(jar)
+    if token:
+        sub = jwt_subject(token)
+        if sub:
+            return sub
+    return None
+
+
+def jwt_expiry_from_jar(jar: CookieJar) -> datetime | None:
+    token = bearer_token_from_jar(jar)
+    if not token:
+        return None
+    return jwt_expiry(token)
+
+
+def jwt_expiry(token: str) -> datetime | None:
+    payload = _decode_jwt_payload(token)
+    if not payload:
+        return None
+    exp = payload.get("exp")
+    if not isinstance(exp, (int, float)):
+        return None
+    return datetime.fromtimestamp(exp, tz=timezone.utc)
+
+
+def jwt_subject(token: str) -> str | None:
+    payload = _decode_jwt_payload(token)
+    if not payload:
+        return None
+    sub = payload.get("sub") or payload.get("user")
+    return str(sub) if sub is not None else None
+
+
+def _decode_jwt_payload(token: str) -> dict[str, Any] | None:
+    try:
+        payload_b64 = token.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+    except (IndexError, ValueError, json.JSONDecodeError, TypeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _merge_local_storage(jar: CookieJar, data: Mapping[str, Any]) -> None:
+    """Pull WBTokenV3 from Playwright storage_state or a localStorage block."""
+    if jar.get("WBTokenV3") or jar.get("WBToken"):
+        return
+
+    token = _token_from_local_storage_value(data.get("localStorage"))
+    if token:
+        jar["WBTokenV3"] = token
+        return
+
+    oauth = data.get("wbid-oauth-sdk-access-token")
+    if isinstance(oauth, str) and oauth.count(".") >= 2:
+        jar["WBTokenV3"] = oauth
+        return
+
+    for origin in data.get("origins") or []:
+        if not isinstance(origin, dict):
+            continue
+        for item in origin.get("localStorage") or []:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if name == "wbx__tokenData":
+                token = _token_from_local_storage_value(item.get("value"))
+                if token:
+                    jar["WBTokenV3"] = token
+                    return
+            if name == "wbid-oauth-sdk-access-token":
+                value = item.get("value")
+                if isinstance(value, str) and value.count(".") >= 2:
+                    jar["WBTokenV3"] = value
+                    return
+
+
+def _token_from_local_storage_value(value: Any) -> str | None:
+    if not value:
+        return None
+    if isinstance(value, dict):
+        token = value.get("token")
+        return str(token) if token else None
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, dict) and parsed.get("token"):
+            return str(parsed["token"])
     return None
 
 
