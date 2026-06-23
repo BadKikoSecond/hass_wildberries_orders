@@ -27,6 +27,17 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _phone_login_supported() -> bool:
+    """Playwright is optional — HA cannot pip-install it on some ARM/Python builds."""
+    try:
+        import importlib.util
+
+        return importlib.util.find_spec("playwright") is not None
+    except Exception:
+        return False
+
+
 STEP_PHONE_SCHEMA = vol.Schema({vol.Required(CONF_PHONE): str})
 STEP_PHONE_CODE_SCHEMA = vol.Schema({vol.Required(CONF_PHONE_CODE): str})
 STEP_COOKIES_SCHEMA = vol.Schema(
@@ -139,9 +150,12 @@ class WildberriesOrdersConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
+        menu_options = ["cookies"]
+        if _phone_login_supported():
+            menu_options.insert(0, "phone")
         return self.async_show_menu(
             step_id="user",
-            menu_options=["phone", "cookies"],
+            menu_options=menu_options,
         )
 
     async def async_step_phone(

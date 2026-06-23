@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Wildberries Orders",
-        "description": "Choose how to sign in.",
+        "description": "Recommended: paste cookies JSON (works on all HA hosts). Phone login needs Playwright + Chromium on the HA host.",
         "menu_options": {
           "phone": "Phone + PUSH/SMS code",
           "cookies": "Paste cookies JSON"
@@ -34,7 +34,7 @@
     "error": {
       "cannot_connect": "Could not connect to Wildberries (antibot or network)",
       "invalid_auth": "Wildberries rejected the session — check cookies or sign in again",
-      "playwright_missing": "Playwright failed to load — restart Home Assistant",
+      "playwright_missing": "Playwright is not available on this HA host — use cookies JSON or run scripts/wb_phone_login.py on your PC",
       "chromium_install_failed": "Could not download Chromium. HA host needs internet and ~300 MB free space",
       "phone_login_failed": "Login failed (antibot, wrong code, or rate limit — wait and retry)"
     },

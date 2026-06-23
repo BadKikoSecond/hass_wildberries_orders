@@ -59,34 +59,41 @@
 
 ## Настройка
 
-### Способ A — телефон + код (рекомендуется)
+### Способ A — вставить cookies JSON (рекомендуется для Home Assistant)
 
-В мастере настройки: **Телефон + код PUSH/SMS** → номер → код из приложения WB.
+1. Залогиньтесь на [wildberries.ru](https://www.wildberries.ru) в браузере на ПК
+2. Экспортируйте cookies (Cookie-Editor) **или** `cookie.json` из `wb_phone_login.py` (см. способ B)
+3. В мастере HA: **Вставить cookies JSON**
 
-На хосте HA при первом входе один раз скачается Chromium (~300 МБ). Playwright указан в `manifest.json` и ставится вместе с интеграцией. Если Chromium ещё не скачан:
+Обязательны **`x_wbaas_token`** (antibot) и marketplace-токен (`WBTokenV3` / `wbx__tokenData` в storage_state).
+
+> На ARM / Docker / Python 3.14 в контейнере HA **Playwright не ставится** — это нормально. Опрос заказов идёт через **curl_cffi** (как в интеграции Ozon), браузер для работы не нужен.
+
+### Способ B — телефон + код (только если Playwright доступен на хосте HA)
+
+В мастере: **Телефон + код PUSH/SMS** → номер → код из приложения WB.
+
+Playwright **не** входит в зависимости интеграции — HA не пытается ставить его при открытии мастера. Пункт появится только если Playwright уже установлен в окружении HA вручную.
+
+На хосте HA при первом входе один раз скачается Chromium (~300 МБ):
 
 ```bash
-# внутри окружения HA / SSH add-on
+# внутри окружения HA / SSH add-on (если pip install playwright прошёл)
 python -m playwright install chromium
 ```
 
-После настройки опрос заказов идёт через **curl_cffi**, браузер больше не нужен.
-
-С ПК (экспорт сессии для ручной вставки cookies):
+**Проще с ПК** — экспорт сессии без Playwright в HA:
 
 ```bash
 cd hass_wildberries_orders
-.venv/bin/python scripts/wb_phone_login.py 79117108265 -i -o cookie.json
-.venv/bin/python cli.py --cookies cookie.json   # проверка
+pip install -r requirements.txt playwright
+playwright install chromium
+python scripts/wb_phone_login.py 79117108265 -i -o cookie.json
 ```
 
-### Способ B — вставить cookies JSON
+Затем вставьте содержимое `cookie.json` в мастере HA (способ A).
 
-1. Залогиньтесь на [wildberries.ru](https://www.wildberries.ru) в браузере на ПК
-2. Экспортируйте cookies (Cookie-Editor) **или** `cookie.json` из `wb_phone_login.py`
-3. В мастере: **Вставить cookies JSON**
-
-Обязательны **`x_wbaas_token`** (antibot) и marketplace-токен (`WBTokenV3` / `wbx__tokenData` в storage_state).
+После настройки опрос заказов идёт через **curl_cffi**, браузер больше не нужен.
 
 ### Повторный вход
 

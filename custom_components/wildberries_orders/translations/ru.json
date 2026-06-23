@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Wildberries Orders",
-        "description": "Выберите способ входа.",
+        "description": "Рекомендуется: вставить cookies JSON (работает на любом хосте HA). Вход по телефону требует Playwright и Chromium на хосте HA.",
         "menu_options": {
           "phone": "Телефон + код PUSH/SMS",
           "cookies": "Вставить cookies JSON"
@@ -34,7 +34,7 @@
     "error": {
       "cannot_connect": "Не удалось подключиться к Wildberries (antibot или сеть)",
       "invalid_auth": "Wildberries не принял сессию — проверьте cookies или войдите снова",
-      "playwright_missing": "Не удалось загрузить Playwright — перезапустите Home Assistant",
+      "playwright_missing": "Playwright недоступен на этом хосте HA — вставьте cookies JSON или запустите scripts/wb_phone_login.py на ПК",
       "chromium_install_failed": "Не удалось скачать Chromium. Нужен интернет на хосте HA и ~300 МБ свободного места",
       "phone_login_failed": "Не удалось войти (antibot, неверный код или лимит — подождите и повторите)"
     },

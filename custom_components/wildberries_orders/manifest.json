@@ -7,6 +7,6 @@
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/BadKikoSecond/hass_wildberries_orders/issues",
-  "requirements": ["curl_cffi>=0.7.0", "playwright>=1.40.0"],
-  "version": "1.5.0"
+  "requirements": ["curl_cffi>=0.7.0"],
+  "version": "1.5.1"
 }
